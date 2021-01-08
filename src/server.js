@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const morgan = require('morgan');
+const cors = require('cors');
 const qs = require('querystring');
 const ord = require('locutus/php/strings/ord');
 const dechex = require('locutus/php/math/dechex');
@@ -39,6 +40,7 @@ const ID_ADDITIONAL_DATA_FIELD_TEMPLATE = '62';
 const ID_ADDITIONAL_DATA_FIELD_TEMPLATE_TXID = '05';
 const ID_CRC16 = '63';
 
+/*
 const pixKey= '70048318418';
 let description = 'Pagamento';
 const merchantName = 'Daniel Cabral de Souza';
@@ -46,6 +48,7 @@ const merchantCity = 'Açu';
 let txid = '2121';
 let amount = 100.00;
 amount = number_format(amount, 2, '.', '');
+*/
 
 /**
    * Metodo responsavel por retornar o valor completo do objeto payload
@@ -62,7 +65,7 @@ amount = number_format(amount, 2, '.', '');
    * Metodo responsavel por retornar os valores complestos de informação da conta
    * @return string
    */
-   function getMerchantAccountInformation(){
+   function getMerchantAccountInformation(pixKey, description){
      //Dominio do banco
      const gui = getValue(ID_MERCHANT_ACCOUNT_INFORMATION_GUI, 'br.gov.bcb.pix');
 
@@ -80,7 +83,7 @@ amount = number_format(amount, 2, '.', '');
    * Metodo responsavel por retornar os valores completos do campo adicional (txid)
    * @return string
    */
-    function getAdditionalDataFieldTemplate(){
+    function getAdditionalDataFieldTemplate(txid){
      //TXID
      txid =  getValue(ID_ADDITIONAL_DATA_FIELD_TEMPLATE_TXID,  txid);
 
@@ -114,13 +117,13 @@ amount = number_format(amount, 2, '.', '');
 function getPayload() {
   //Cria o payload  
   payload =  getValue(ID_PAYLOAD_FORMAT_INDICATOR, '01')+
-  getMerchantAccountInformation()+
+  getMerchantAccountInformation(pixKey, description)+
    getValue(ID_MERCHANT_CATEGORY_CODE, '0000')+
    getValue(ID_TRANSACTION_CURRENCY, '986')+
    getValue(ID_TRANSACTION_AMOUNT,  amount)+
    getValue(ID_MERCHANT_NAME,  merchantName)+
    getValue(ID_MERCHANT_CITY,merchantCity)+
-   getAdditionalDataFieldTemplate();
+   getAdditionalDataFieldTemplate(txid);
 
   //Retorna o payload + CRC16 
   return payload+getCRC16(payload);
@@ -147,9 +150,61 @@ async function getToken(){
   return response.data.access_token;
 }
 
+/**
+ * @api {post} /payload/ Get payload information
+ * @apiName Get Payload
+ * @apiGroup QrCode
+ 
+ * @apiParam {String} pixKey Key pix of merchant.
+ * @apiParam {String} description Description of payment.
+ * @apiParam {String} merchantName  Name of merchant.
+ * @apiParam {String} merchantName  Name of merchant.
+ * @apiParam {String} txid Id of the transaction.
+ * @apiParam {Float} amount  Value of the transaction.
+ * @apiParam {String} token  Token autorizathion of the User.
+ *
+ * @apiSuccess {String} payload Payload complet.
+ * 
+ * @apiSuccessExample Success-Response:
+ *     HTTP/1.1 200 OK
+ *     {
+ *       "pixKey": "70048318418",
+ *       "description": "Payment",
+ *       "merchantName": "Daniel Cabral de Souza",
+ *       "merchantCity": "Natal",
+ *       "txid": "2121",
+ *       "amount": 100.00
+ *     }
+ *
+ * @apiError Payload error data.
+ *
+ * @apiErrorExample Error-Response:
+ *     HTTP/1.1 404 Error
+ *     {
+ *       "error": "Payload dont cant be generated"
+ *     }
+ * 
+ */
 
-app.post('/', async function(req, res){
-  req
+app.post('/payload', async function(req, res){
+  const {pixKey, description, merchantName,merchantCity, txid} = req.body;
+  let {amount} = req.body;
+  amount = number_format(amount, 2, '.', '');
+  try{
+  //Cria o payload  
+  payload =  getValue(ID_PAYLOAD_FORMAT_INDICATOR, '01')+
+  getMerchantAccountInformation(pixKey, description)+
+   getValue(ID_MERCHANT_CATEGORY_CODE, '0000')+
+   getValue(ID_TRANSACTION_CURRENCY, '986')+
+   getValue(ID_TRANSACTION_AMOUNT,  amount)+
+   getValue(ID_MERCHANT_NAME,  merchantName)+
+   getValue(ID_MERCHANT_CITY,merchantCity)+
+   getAdditionalDataFieldTemplate(txid);
+  }catch(err){
+    res.sendStatus(404); 
+  }
+  //Retorna o payload + CRC16 
+  res.send(payload+getCRC16(payload));
 });
 
 

@@ -1,0 +1,7 @@
+{
+    "name": "Pix Pay",
+    "version": "1.0.0",
+    "description": "Api de pagamentos com pix",
+    "title": "Pix Pay API",
+    "url" : "https://pixpay.herokuapp.com"
+  }
