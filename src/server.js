@@ -288,7 +288,7 @@ app.post('/', async function(req, res){
         getValue(ID_COUNTRY_CODE,'BR')+
         getValue(ID_MERCHANT_NAME,  merchantName)+
         getValue(ID_MERCHANT_CITY,merchantCity)+
-        getAdditionalDataFieldTemplate(result.data.txid);
+        getAdditionalDataFieldTemplate('***');
         //Retorna o payload + CRC16 
         console.log(payload+getCRC16(payload));
         res.send(payload+getCRC16(payload));
