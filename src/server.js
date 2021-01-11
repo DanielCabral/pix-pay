@@ -26,10 +26,12 @@ app.use('/',express.static('apidoc'))
 
 //Consts and vars
 const ID_PAYLOAD_FORMAT_INDICATOR = '00';
+const ID_POINT_OF_INITIATION_METHOD = '01';
 const ID_MERCHANT_ACCOUNT_INFORMATION = '26';
 const ID_MERCHANT_ACCOUNT_INFORMATION_GUI = '00';
 const ID_MERCHANT_ACCOUNT_INFORMATION_KEY = '01';
 const ID_MERCHANT_ACCOUNT_INFORMATION_DESCRIPTION = '02';
+const ID_MERCHANT_ACCOUNT_INFORMATION_URL = '25';
 const ID_MERCHANT_CATEGORY_CODE = '52';
 const ID_TRANSACTION_CURRENCY = '53';
 const ID_TRANSACTION_AMOUNT = '54';
@@ -65,18 +67,20 @@ amount = number_format(amount, 2, '.', '');
    * Metodo responsavel por retornar os valores complestos de informação da conta
    * @return string
    */
-   function getMerchantAccountInformation(pixKey, description){
+   function getMerchantAccountInformation(pixKey, description, url){
      //Dominio do banco
      const gui = getValue(ID_MERCHANT_ACCOUNT_INFORMATION_GUI, 'br.gov.bcb.pix');
 
      //Chave Pix
-     const key =getValue(ID_MERCHANT_ACCOUNT_INFORMATION_KEY, pixKey);
+     const key = pixKey !== '' ? getValue(ID_MERCHANT_ACCOUNT_INFORMATION_KEY, pixKey) : '';
 
      //Descrição do pagamento
-     description = description.length?  getValue(ID_MERCHANT_ACCOUNT_INFORMATION_DESCRIPTION, description) : '';
+     description = description !== '' ?  getValue(ID_MERCHANT_ACCOUNT_INFORMATION_DESCRIPTION, description) : '';
+
+     location = url !== '' ?  getValue(ID_MERCHANT_ACCOUNT_INFORMATION_URL, url.replace(`/https?\:\/\//`,'')) : '';
 
      //Valor completo da conta
-     return  getValue(ID_MERCHANT_ACCOUNT_INFORMATION, gui+key+description);
+     return  getValue(ID_MERCHANT_ACCOUNT_INFORMATION, gui+key+description+location);
    }
 
    /**
@@ -90,6 +94,14 @@ amount = number_format(amount, 2, '.', '');
      //Retorna o valor completo
      return  getValue(ID_ADDITIONAL_DATA_FIELD_TEMPLATE, txid);
    }
+
+    /**
+   * Metodo responsavel por retornar o valor do ID_POINT_OF_INITIATION_METHOD
+   * @return string
+   */
+function getUniquePayment(uniquePayment){
+  return uniquePayment?getValue(ID_POINT_OF_INITIATION_METHOD, '12') : '';
+}
 
  function getCRC16(payload) {
   //ADICIONA DADOS GERAIS NO PAYLOAD
@@ -117,7 +129,7 @@ amount = number_format(amount, 2, '.', '');
 function getPayload() {
   //Cria o payload  
   payload =  getValue(ID_PAYLOAD_FORMAT_INDICATOR, '01')+
-  getMerchantAccountInformation(pixKey, description)+
+  getMerchantAccountInformation(pixKey, description,'')+
    getValue(ID_MERCHANT_CATEGORY_CODE, '0000')+
    getValue(ID_TRANSACTION_CURRENCY, '986')+
    getValue(ID_TRANSACTION_AMOUNT,  amount)+
@@ -193,10 +205,12 @@ app.post('/payload', async function(req, res){
   try{
   //Cria o payload  
   payload =  getValue(ID_PAYLOAD_FORMAT_INDICATOR, '01')+
-  getMerchantAccountInformation(pixKey, description)+
+  getUniquePayment(false)+
+  getMerchantAccountInformation(pixKey, description, '')+
    getValue(ID_MERCHANT_CATEGORY_CODE, '0000')+
    getValue(ID_TRANSACTION_CURRENCY, '986')+
    getValue(ID_TRANSACTION_AMOUNT,  amount)+
+   getValue(ID_COUNTRY_CODE,'BR')+
    getValue(ID_MERCHANT_NAME,  merchantName)+
    getValue(ID_MERCHANT_CITY,merchantCity)+
    getAdditionalDataFieldTemplate(txid);
@@ -207,13 +221,38 @@ app.post('/payload', async function(req, res){
   res.send(payload+getCRC16(payload));
 });
 
+app.get('/:txid', async function(req, res){
+  const {txid} = req.params;
+  const acess_token = await getToken();
+    //const txid='212121212121212121212121212121231'
+    const endpoint = `https://api.hm.bb.com.br/pix/v1/cob/${txid}?gw-dev-app-key=d27bb77900ffab901361e17da0050b56b9d1a5bf`;
+    const headers = {
+      'Cache-Control': 'no-cache',
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + acess_token,
+    };
+
+    await axios.get(endpoint, {headers:headers})
+    .then((result) => {
+      console.log(result.data);
+      res.send(result.data);
+    })
+    .catch(err => {
+      console.log(err)
+      res.send(err);
+    });
+});
+
 
 app.post('/', async function(req, res){
-  
-  console.log(getPayload());
-  /*const acess_token = await getToken();
-    const txid='21212121212121212121212121212123'
-    const endpoint = `https://api.hm.bb.com.br/pix/v1/cob/{txid}?gw-dev-app-key=d27bb77900ffab901361e17da0050b56b9d1a5bf`;
+  const {description, devedor, merchantName,merchantCity, txid, uniquePayment} = req.body;
+  let {amount} = req.body;
+  amount = number_format(amount, 2, '.', '');
+  console.log('amount ',amount);
+
+  const acess_token = await getToken();
+    //const txid='212121212121212121212121212121231'
+    const endpoint = `https://api.hm.bb.com.br/pix/v1/cob/${txid}?gw-dev-app-key=d27bb77900ffab901361e17da0050b56b9d1a5bf`;
     const headers = {
       'Cache-Control': 'no-cache',
       'Content-Type': 'application/json',
@@ -224,27 +263,56 @@ app.post('/', async function(req, res){
           expiracao : "3600",
         },
         devedor: {
-          cpf: "12345678909",
-          nome: "Francisco da Silva"
+          cpf: devedor.cpf,
+          nome: devedor.nome,
         },
         valor: {
-          original: "123.45"
+          original: amount,
         },
         chave: "testqrcode01@bb.com.br",
-        solicitacaoPagador: "Cobrança dos serviços prestados."
+        solicitacaoPagador: description
     };
 
-    const response = await axios.put(endpoint, request,{headers:headers})
+    await axios.put(endpoint, request,{headers:headers})
     .then((result) => {
-     	console.log(result);
-        res.send(result.data);
+      console.log(result.data);
+      if(result.data.location !== undefined) {
+        try{
+        //Cria o payload  
+        payload =  getValue(ID_PAYLOAD_FORMAT_INDICATOR, '01')+
+        getUniquePayment(uniquePayment)+
+        getMerchantAccountInformation('', '', result.data.location)+
+        getValue(ID_MERCHANT_CATEGORY_CODE, '0000')+
+        getValue(ID_TRANSACTION_CURRENCY, '986')+
+        getValue(ID_TRANSACTION_AMOUNT,  amount)+
+        getValue(ID_COUNTRY_CODE,'BR')+
+        getValue(ID_MERCHANT_NAME,  merchantName)+
+        getValue(ID_MERCHANT_CITY,merchantCity)+
+        getAdditionalDataFieldTemplate(result.data.txid);
+        //Retorna o payload + CRC16 
+        console.log(payload+getCRC16(payload));
+        res.send(payload+getCRC16(payload));
+        }catch(err){
+          console.log(err);
+          res.status(404).send(err); 
+        }
+      }else{
+        res.status(400).send({"error":     
+    "Dados incorretos"}
+    )
+      }
 	})
-	.catch(err => console.log(err))
+	.catch(err => {
+    res.status(400).send({"error":     
+    err.message}
+    )
+    console.log(err.response);
+  }
+    );
     ;
-    */
 });
 
 
 
-const port = process.env.PORT || 3333;
+const port = process.env.PORT || 3334;
 app.listen(port);
