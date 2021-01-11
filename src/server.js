@@ -244,15 +244,15 @@ app.get('/:txid', async function(req, res){
 });
 
 
-app.post('/', async function(req, res){
+app.post('/qrcode', async function(req, res){
   const {description, devedor, merchantName,merchantCity, txid, uniquePayment} = req.body;
   let {amount} = req.body;
   amount = number_format(amount, 2, '.', '');
-  console.log('amount ',amount);
+
 
   const acess_token = await getToken();
     //const txid='212121212121212121212121212121231'
-    const endpoint = `https://api.hm.bb.com.br/pix/v1/cob/${txid}?gw-dev-app-key=d27bb77900ffab901361e17da0050b56b9d1a5bf`;
+    const endpoint = `https://api.hm.bb.com.br/pix/v1/cobqrcode/${txid}?gw-dev-app-key=d27bb77900ffab901361e17da0050b56b9d1a5bf`;
     const headers = {
       'Cache-Control': 'no-cache',
       'Content-Type': 'application/json',
@@ -277,25 +277,7 @@ app.post('/', async function(req, res){
     .then((result) => {
       console.log(result.data);
       if(result.data.location !== undefined) {
-        try{
-        //Cria o payload  
-        payload =  getValue(ID_PAYLOAD_FORMAT_INDICATOR, '01')+
-        getUniquePayment(uniquePayment)+
-        getMerchantAccountInformation('', '', result.data.location)+
-        getValue(ID_MERCHANT_CATEGORY_CODE, '0000')+
-        getValue(ID_TRANSACTION_CURRENCY, '986')+
-        getValue(ID_TRANSACTION_AMOUNT,  amount)+
-        getValue(ID_COUNTRY_CODE,'BR')+
-        getValue(ID_MERCHANT_NAME,  merchantName)+
-        getValue(ID_MERCHANT_CITY,merchantCity)+
-        getAdditionalDataFieldTemplate('***');
-        //Retorna o payload + CRC16 
-        console.log(payload+getCRC16(payload));
-        res.send(payload+getCRC16(payload));
-        }catch(err){
-          console.log(err);
-          res.status(404).send(err); 
-        }
+        res.send(result.data.textoImagemQRcode);
       }else{
         res.status(400).send({"error":     
     "Dados incorretos"}
@@ -307,11 +289,9 @@ app.post('/', async function(req, res){
     err.message}
     )
     console.log(err.response);
-  }
-    );
-    ;
+  });
+        
 });
-
 
 
 const port = process.env.PORT || 3334;
